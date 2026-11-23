@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit colors="false" beStrictAboutTestsThatDoNotTestAnything="true">
+    <testsuites>
+        <testsuite name="fixture"><directory suffix="Test.php">suite</directory></testsuite>
+    </testsuites>
+</phpunit>
