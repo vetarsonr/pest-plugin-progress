@@ -6,6 +6,19 @@ permissions:
   contents: read
 
 jobs:
+  syntax:
+    name: PHP 8.1 syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: none
+      # Composer blocks the PHPUnit versions that Pest 2 can use on PHP 8.1.
+      - run: git ls-files -z -- '*.php' | xargs -0 -n 1 php -l
+
   test:
     name: Pest ${{ matrix.stack.pest }} / PHP ${{ matrix.stack.php }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -14,7 +27,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         stack:
-          - { pest: 2, php: '8.1' }
           - { pest: 2, php: '8.2' }
           - { pest: 2, php: '8.3' }
           - { pest: 3, php: '8.2' }
@@ -26,13 +38,10 @@ jobs:
           - { pest: 5, php: '8.5' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: ${{ matrix.stack.php }}
           tools: composer:v2
           coverage: none
-      - name: Verify the minimum PHP syntax before resolving dependencies
-        if: matrix.stack.php == '8.1'
-        run: git ls-files -z -- '*.php' | xargs -0 -n 1 php -l
-      - run: composer require --dev "pestphp/pest:^${{ matrix.stack.pest }}.0" -W --prefer-dist --no-interaction --no-progress
+      - run: composer update --with "pestphp/pest:^${{ matrix.stack.pest }}.0" --prefer-dist --no-interaction --no-progress
       - run: composer test
