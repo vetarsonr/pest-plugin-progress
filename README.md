@@ -2,7 +2,7 @@
 
 Pest Progress is designed for projects with large test suites. A live counter keeps terminal output compact by showing completed tests, elapsed time, and totals by outcome. To debug a failure, find the test by name and `file:line` in the final summary, then open the plain-text report for the diagnostic message and stack trace.
 
-| Before · `--compact` | After · `--compact --progress` |
+| Pest with `--compact` | Pest with `--progress` |
 | --- | --- |
 | <img src="assets/images/before.png" alt="Pest's compact output fills the terminal with dots" width="420"> | <img src="assets/images/after.png" alt="All 25,675 tests finished across eight processes. Of those, 25,672 passed and 3 were skipped." width="420"> |
 
@@ -16,11 +16,11 @@ composer require --dev vetarsonr/pest-plugin-progress
 
 ## Usage
 
-Add `--progress` to a sequential or parallel run.
+Use `--progress` to replace Pest's per-test output with the counter. The `--compact` flag is optional.
 
 ```sh
 ./vendor/bin/pest --progress
-./vendor/bin/pest --compact --parallel --progress
+./vendor/bin/pest --parallel --progress
 ```
 
 <img src="assets/images/progress-demo.gif">
@@ -37,7 +37,7 @@ Pest Progress groups failures and errors in one list below Pest's final summary.
 
 ## Failure report
 
-With `--progress` enabled, a test failure or error produces **`tests/pest-failures.txt`** in your project. If you use `--test-directory=spec`, the default becomes `spec/pest-failures.txt`. Both paths are relative to the project root, including when you start Pest from a subdirectory.
+With the counter enabled, a test failure or error produces **`tests/pest-failures.txt`** in your project. If you use `--test-directory=spec`, the default becomes `spec/pest-failures.txt`. Both paths are relative to the project root, including when you start Pest from a subdirectory.
 
 The report starts with an index of `file:line` locations. Each failed test or dataset has its own entry with the available source line, assertion or exception message, diff, and stack trace. A passing run with the plugin enabled removes the previous report at the selected path.
 

@@ -34,8 +34,9 @@ final class Plugin implements HandlesArguments, Termination
         /** @var array<int, string> $original */
         $original = $_SERVER['argv'] ?? [];
         $isWorker = Parallel::isWorker();
-        // ParaTest starts workers after we have consumed the parent's --progress flag.
         $log = $isWorker ? RunDirectory::workerLog() : null;
+        // A nested Pest command must only pass its own event log to its workers.
+        RunDirectory::clearInheritedLog();
         $options = Options::parse($arguments, $original, $log instanceof EventLog);
         if (! $options->enabled) {
             return $arguments;

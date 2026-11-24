@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Vendor\PestProgress;
 
+use NunoMaduro\Collision\Adapters\Phpunit\Printers\DefaultPrinter;
 use PHPUnit\Event\TestRunner\ExecutionAbortedSubscriber;
 use PHPUnit\Event\TestSuite\TestSuite;
 use PHPUnit\TextUI\Configuration\Registry;
@@ -102,6 +103,9 @@ final class Run
 
     public function sequentialApplication(): void
     {
+        // Skip formatting per-test descriptions that the counter hides.
+        DefaultPrinter::compact(true);
+
         // Pest runs some combinations (e.g. --parallel --todo) in one process.
         $this->directory?->close();
         $this->directory = null;

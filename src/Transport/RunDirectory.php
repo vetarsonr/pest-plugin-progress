@@ -48,6 +48,14 @@ final class RunDirectory
         return is_string($path) && is_file($path.'/events.jsonl') ? new EventLog($path) : null;
     }
 
+    public static function clearInheritedLog(): void
+    {
+        unset($_ENV[self::ENV], $_SERVER[self::ENV]);
+        if (getenv(self::ENV) !== false) {
+            putenv(self::ENV);
+        }
+    }
+
     public function close(): void
     {
         foreach ($this->previous as $key => [$system, $env]) {

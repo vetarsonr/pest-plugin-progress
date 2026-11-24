@@ -72,19 +72,20 @@ dataset('progress runners', [
     'four workers' => [['--parallel', '--processes=4']],
 ]);
 
-it('keeps native results, hides the failure blocks and records each case in a full text report with --progress', function (array $runner) {
+it('hides per-test output and records failures with --progress alone', function (array $runner) {
     $file = $this->temp.'/nested/failures.txt';
-    $args = [...$runner, '--compact'];
-    $native = progressFixture($args, binary: progressNativeBinary($this->temp));
-    $process = progressFixture([...$args, '--progress', '--failures-file='.$file]);
+    $native = progressFixture($runner, binary: progressNativeBinary($this->temp));
+    $process = progressFixture(['--progress', ...$runner], ['PEST_FAILURES_FILE' => $file]);
     $out = $process->getOutput();
     $err = $process->getErrorOutput();
     $report = file_get_contents($file);
     $divider = str_repeat('-', 72);
     expect($process->getExitCode())->toBe($native->getExitCode())->not->toBe(0)
-        ->and($out)->toContain('Tests:', '10 passed', 'Duration:')->not->toContain('[progress]', 'FAILED', 'Failed asserting')
-        ->and(preg_match('/^\s*[.!⨯st✓]+\s*$/mu', $out))->toBe(0)
-        ->and($out.$err)->not->toContain("\033", 'Failed asserting', 'Fixture exception', 'Stack trace')
+        ->and($out)->toContain('Tests:', '10 passed', 'Duration:')->not->toContain('[progress]')
+        ->not->toContain('PASS')->not->toContain('FAILED')->not->toContain('it passes each example')
+        ->not->toMatch('/^\s*[.!⨯st✓]+\s*$/mu')
+        ->and($out.$err)->not->toContain("\033")->not->toContain('Failed asserting')
+        ->not->toContain('Fixture exception')->not->toContain('Stack trace')
         ->and($err)->toContain('[progress] 19/19 (100%) failed=3 errors=1 skipped=2 passed=10 todo=1 incomplete=1 risky=1')
         ->and(substr_count($err, '[progress]'))->toBe(1)
         ->and($err)->toEndWith("Failed tests (4) — written to $file\n\n".progressFailureLabels())
@@ -135,9 +136,10 @@ it('writes the default report in the project test directory only during enabled 
     $file = $this->temp.'/'.$testDirectory.'/pest-failures.txt';
     $run = fn (array $args): Process => progressFixture($args, ['PEST_FAILURES_FILE' => false], $cwd, $projectVendor.'/bin/pest', $testDirectory);
 
-    $native = $run(['--filter=reports an exception']);
+    $native = $run([]);
     expect($native->getExitCode())->not->toBe(0)
         ->and($native->getOutput())->toContain('FAILED', 'Fixture exception')
+        ->and($native->getErrorOutput())->toBe('')
         ->and(is_file($file))->toBeFalse();
     $failed = $run(['--progress', '--filter=reports an exception']);
     expect($failed->getExitCode())->not->toBe(0)
@@ -146,9 +148,10 @@ it('writes the default report in the project test directory only during enabled 
     $report = file_get_contents($file);
     $native = $run(['--group=passing']);
     expect($native->getExitCode())->toBe(0)->and(file_get_contents($file))->toBe($report);
-    foreach (['--group=passing', '--filter=passes each example'] as $filter) {
-        $passed = $run(['--progress', $filter]);
+    foreach ([['--group=passing'], ['--compact', '--filter=passes each example']] as $args) {
+        $passed = $run(['--progress', ...$args]);
         expect($passed->getExitCode())->toBe(0)
+            ->and($passed->getOutput())->not->toMatch('/^\s*[.✓]+\s*$/mu')
             ->and($passed->getErrorOutput())->toContain('10/10 (100%)')->toEndWith("No failed tests.\n")
             ->and(is_file($file))->toBeFalse();
     }
@@ -182,8 +185,8 @@ it('uses the native printer and exit status without activation or when bypassed'
         ->and($process->getErrorOutput())->toBe($native->getErrorOutput())
         ->and(file_get_contents($file))->toBe('sentinel');
 })->with([
-    'default' => [['--filter=checks through a helper', '--compact'], [], []],
-    'default parallel' => [['--group=passing', '--compact', '--parallel', '--processes=2'], [], []],
+    'compact alone' => [['--filter=checks through a helper', '--compact'], [], []],
+    'default parallel' => [['--group=passing', '--parallel', '--processes=2'], [], []],
     'display options alone' => [['--group=passing', '--compact'], ['--failures-verbosity=1', '--show-failure-details'], []],
     'literal filter' => [['--filter', '--progress'], [], []],
     'positional argument' => [['--', '--progress'], [], []],
@@ -193,12 +196,17 @@ it('uses the native printer and exit status without activation or when bypassed'
     'list tests' => [['--list-tests'], ['--progress'], []],
 ]);
 
-it('respects the environment opt-out and keeps a previous list', function () {
+it('keeps the report and the enclosing run’s event log untouched when disabled', function () {
     $file = $this->temp.'/existing';
     file_put_contents($file, 'sentinel');
-    $process = progressFixture(['--group=passing', '--parallel', '--processes=2', '--failures-file='.$file], ['PEST_PROGRESS' => '0']);
+    $events = $this->temp.'/events.jsonl';
+    touch($events);
+    $process = progressFixture(['--group=passing', '--parallel', '--processes=2', '--failures-file='.$file], [
+        'PEST_PROGRESS' => '0', 'PEST_PROGRESS_RUN' => $this->temp,
+    ]);
     expect($process->getExitCode())->toBe(0)
         ->and($process->getErrorOutput())->toBe('')
+        ->and(file_get_contents($events))->toBe('')
         ->and(file_get_contents($file))->toBe('sentinel');
 });
 
@@ -300,7 +308,7 @@ it('preserves SIGINT behavior and writes the partial list', function (array $run
 
 it('redraws intermediate counts before a parallel worker finishes its file', function () {
     $process = new Process(['sh', '-c', 'exec "$@" 2>&1', 'pest-tty', PHP_BINARY, 'vendor/bin/pest', '--test-directory=tests-fixtures', '--configuration=tests-fixtures/phpunit.xml',
-        '--progress', '--compact', '--parallel', '--processes=2', '--no-failures-file', 'tests-fixtures/edge/LiveTest.php'],
+        '--progress', '--parallel', '--processes=2', '--no-failures-file', 'tests-fixtures/edge/LiveTest.php'],
         dirname(__DIR__), ['TERM' => 'xterm', 'NO_COLOR' => '1', 'CI' => false, 'PEST_PROGRESS' => false, 'PARATEST' => false]);
     $process->setPty(true);
     $process->run();
