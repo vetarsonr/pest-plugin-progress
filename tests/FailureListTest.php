@@ -17,6 +17,15 @@ it('sorts lines numerically, deduplicates and preserves external paths', functio
     expect((new FailureList($results, 'C:\src'))->locations())->toBe(['C:/src-other/X.php', 'T.php:2', 'T.php:10']);
 });
 
+it('uses the owning test file when a diagnostic points into a helper', function () {
+    $testFile = 'tests/Feature cases/CheckoutTest.php';
+    $failures = new FailureList([
+        new Result(Status::Errors, '/project/src/helper.php', 7, 'setup failed', testFile: '/project/'.$testFile),
+    ], '/project/src', '/project');
+
+    expect(TextReport::format($failures))->toContain("Locations\nhelper.php:7", './vendor/bin/pest '.escapeshellarg($testFile));
+});
+
 it('separates each case from its multiline diagnostic in the text report', function () {
     $divider = str_repeat('-', 72);
     $longLine = str_repeat('è', 240);
@@ -33,6 +42,9 @@ it('separates each case from its multiline diagnostic in the text report', funct
 
         Locations
         missing.php:8
+
+        Rerun failed test files
+        ./vendor/bin/pest missing.php
 
         $divider
         [1/2] FAILURE - case `Pest`

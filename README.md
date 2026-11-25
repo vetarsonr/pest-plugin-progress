@@ -39,7 +39,7 @@ Pest Progress groups failures and errors in one list below Pest's final summary.
 
 With the counter enabled, a test failure or error produces **`tests/pest-failures.txt`** in your project. If you use `--test-directory=spec`, the default becomes `spec/pest-failures.txt`. Both paths are relative to the project root, including when you start Pest from a subdirectory.
 
-The report starts with an index of `file:line` locations. Each failed test or dataset has its own entry with the available source line, assertion or exception message, diff, and stack trace. A passing run with the plugin enabled removes the previous report at the selected path.
+The report starts with an index of `file:line` locations. Below the index, copy the Pest command to rerun the files with failures from the project root. For a full suite, the command looks like `./vendor/bin/pest --filter="ErrorTest|FailureTest"`. If another test also matches those names, or the run covered only a selected part of the suite, the command uses the file paths alone. Each failed test or dataset has its own entry with the available source line, assertion or exception message, diff, and stack trace. A passing run with the plugin enabled removes the previous report at the selected path.
 
 <img src="assets/images/failure-report.png" alt="Excerpt from pest-failures.txt showing three source locations and the diagnostics and stack traces for an exception and a failed assertion." width="720">
 

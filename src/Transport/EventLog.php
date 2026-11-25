@@ -24,6 +24,12 @@ final class EventLog
         if ($result->discoveryId !== null) {
             $record['discoveryId'] = $result->discoveryId;
         }
+        if ($result->testClass !== null) {
+            $record['testClass'] = $result->testClass;
+        }
+        if ($result->testFile !== null) {
+            $record['testFile'] = $result->testFile;
+        }
         $this->write($record);
     }
 
@@ -77,7 +83,9 @@ final class EventLog
                     $state->record(new Result($status, $record['file'], is_int($record['line'] ?? null) ? $record['line'] : null,
                         $record['name'], $record['message'], ($record['external'] ?? false) === true,
                         is_string($record['trace'] ?? null) ? $record['trace'] : '',
-                        is_string($record['discoveryId'] ?? null) ? $record['discoveryId'] : null));
+                        is_string($record['discoveryId'] ?? null) ? $record['discoveryId'] : null,
+                        is_string($record['testClass'] ?? null) ? $record['testClass'] : null,
+                        is_string($record['testFile'] ?? null) ? $record['testFile'] : null));
                 }
             }
         } finally {

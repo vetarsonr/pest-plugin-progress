@@ -15,5 +15,7 @@ final class Result
         public readonly bool $external = false,
         public readonly string $trace = '',
         public readonly ?string $discoveryId = null,
+        public readonly ?string $testClass = null,
+        public readonly ?string $testFile = null,
     ) {}
 }

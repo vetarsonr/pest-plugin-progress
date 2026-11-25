@@ -77,7 +77,8 @@ final class TestLocation
         }
 
         return new Result($status, $file, $line, $name, $exception?->description() ?? $message,
-            $discovery, $this->trace($exception), $discovery ? $test->id() : null);
+            $discovery, $this->trace($exception), $discovery ? $test->id() : null,
+            $status->isFailure() && $test instanceof TestMethod ? $test->className() : null);
     }
 
     private function definitionLine(string $file, ?TestCaseMethodFactory $method): ?int
@@ -94,14 +95,16 @@ final class TestLocation
     /** @param class-string $class */
     public function hook(string $class, string $method, Throwable $exception): Result
     {
-        $file = $this->classFile($class);
+        $testFile = $this->classFile($class);
+        $file = $testFile;
         $line = $this->traceLine($exception, $file);
         if ($line === null && preg_match('/^(.+):(\d+)$/m', $exception->stackTrace(), $frame) === 1) {
             [, $file, $line] = $frame;
             $line = (int) $line;
         }
 
-        return new Result(Status::Errors, $file, $line, $class.'::'.$method, $exception->description(), true, $this->trace($exception));
+        return new Result(Status::Errors, $file, $line, $class.'::'.$method, $exception->description(), true, $this->trace($exception),
+            testClass: $class, testFile: $testFile);
     }
 
     private function trace(?Throwable $exception): string

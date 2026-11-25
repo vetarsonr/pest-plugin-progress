@@ -13,6 +13,8 @@ final class FailureEntry
 {
     public readonly string $path;
 
+    public readonly string $testFile;
+
     public readonly ?int $line;
 
     public readonly string $name;
@@ -25,11 +27,14 @@ final class FailureEntry
 
     private readonly string $prefix;
 
-    public function __construct(private readonly Result $result, string $cwd)
+    public function __construct(private readonly Result $result, string $cwd, ?string $projectRoot = null)
     {
         $this->prefix = rtrim(str_replace('\\', '/', $cwd), '/').'/';
         $path = str_replace('\\', '/', $result->file);
         $this->path = $this->displayPath($path);
+        $root = rtrim(str_replace('\\', '/', $projectRoot ?? $cwd), '/').'/';
+        $testFile = $this->absoluteTestFile();
+        $this->testFile = str_starts_with($testFile, $root) ? substr($testFile, strlen($root)) : $testFile;
         $this->line = $result->line;
         $this->name = trim((string) preg_replace('/\s+/u', ' ', $this->plain($result->name)));
         $this->kind = $result->status === Status::Errors ? 'Error' : 'Failure';
@@ -49,6 +54,23 @@ final class FailureEntry
         return $this->location().'  › '.$this->name;
     }
 
+    public function absoluteTestFile(): string
+    {
+        return $this->absolutePath($this->result->testFile ?? $this->result->file);
+    }
+
+    public function filterName(): string
+    {
+        if ($this->result->testClass !== null) {
+            return basename(str_replace('\\', '/', $this->result->testClass));
+        }
+
+        // Loading may fail before Pest has generated its class from the filename.
+        $stem = explode('.', basename($this->testFile), 2)[0];
+
+        return (string) preg_replace('/%[a-fA-F0-9]{2}|[^\p{L}\p{N}]/u', '', $stem);
+    }
+
     /** @return array<string, string> */
     public function details(): array
     {
@@ -61,8 +83,7 @@ final class FailureEntry
 
     private function readSourceLine(): string
     {
-        $path = str_replace('\\', '/', $this->result->file);
-        $source = str_starts_with($path, '/') || preg_match('~^[a-z]:/~i', $path) ? $path : $this->prefix.$path;
+        $source = $this->absolutePath($this->result->file);
         $number = $this->line;
         // PHPUnit gives the throwing frame first, including when an assertion lives in a helper.
         if (preg_match('~\A((?:/|[a-z]:/)[^\r\n]+):([1-9]\d*)\r?(?:\n|\z)~i', str_replace('\\', '/', $this->result->trace), $frame)
@@ -87,6 +108,13 @@ final class FailureEntry
         } catch (RuntimeException) {
             return '';
         }
+    }
+
+    private function absolutePath(string $file): string
+    {
+        $path = str_replace('\\', '/', $file);
+
+        return str_starts_with($path, '/') || preg_match('~^[a-z]:/~i', $path) ? $path : $this->prefix.$path;
     }
 
     private function displayPath(string $path): string

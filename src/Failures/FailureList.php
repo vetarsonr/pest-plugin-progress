@@ -12,9 +12,9 @@ final class FailureList
     public readonly array $entries;
 
     /** @param list<Result> $failures */
-    public function __construct(array $failures, string $cwd)
+    public function __construct(array $failures, string $cwd, ?string $projectRoot = null)
     {
-        $entries = array_map(static fn (Result $result): FailureEntry => new FailureEntry($result, $cwd), $failures);
+        $entries = array_map(static fn (Result $result): FailureEntry => new FailureEntry($result, $cwd, $projectRoot), $failures);
         usort($entries, static fn (FailureEntry $a, FailureEntry $b): int => strcmp($a->path, $b->path)
             ?: ($a->line <=> $b->line) ?: strcmp($a->name, $b->name) ?: strcmp($a->message, $b->message));
         $this->entries = $entries;

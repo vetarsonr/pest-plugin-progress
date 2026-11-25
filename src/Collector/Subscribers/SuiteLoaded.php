@@ -13,6 +13,6 @@ final class SuiteLoaded implements Events\LoadedSubscriber
 
     public function notify(Events\Loaded $event): void
     {
-        $this->run->parallelSuite($event->testSuite());
+        $this->run->suiteLoaded($event->testSuite());
     }
 }

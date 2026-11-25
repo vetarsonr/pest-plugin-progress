@@ -53,6 +53,20 @@ function progressNativeBinary(string $temp): string
     return $temp.'/native.php';
 }
 
+function progressProjectBinary(string $root): string
+{
+    $installedVendor = dirname(__DIR__).'/vendor';
+    $projectVendor = $root.'/vendor';
+    mkdir($projectVendor.'/bin', 0700, true);
+    mkdir($projectVendor.'/pestphp/pest/bin', 0700, true);
+    foreach (['bin/pest', 'pestphp/pest/bin/pest', 'pest-plugins.json'] as $path) {
+        copy($installedVendor.'/'.$path, $projectVendor.'/'.$path);
+    }
+    file_put_contents($projectVendor.'/autoload.php', '<?php return require '.var_export($installedVendor.'/autoload.php', true).';');
+
+    return $projectVendor.'/bin/pest';
+}
+
 function progressLocations(): string
 {
     return "tests-fixtures/suite/ErrorTest.php:6\ntests-fixtures/suite/FailureTest.php:8\ntests-fixtures/suite/FailureTest.php:12\n";
@@ -90,12 +104,63 @@ it('hides per-test output and records failures with --progress alone', function 
         ->and(substr_count($err, '[progress]'))->toBe(1)
         ->and($err)->toEndWith("Failed tests (4) — written to $file\n\n".progressFailureLabels())
         ->and(substr_count($report, "\n".$divider."\n"))->toBe(4)
-        ->and($report)->toStartWith("Failed tests (4)\n\nLocations\n".progressLocations()."\n".$divider."\n[1/4] ERROR - it reports an exception\n")
+        ->and($report)->toStartWith("Failed tests (4)\n\nLocations\n".progressLocations()
+            ."\nRerun failed test files\n".'./vendor/bin/pest --filter="ErrorTest|FailureTest"'
+            .' --test-directory=tests-fixtures --configuration=tests-fixtures/phpunit.xml'
+            ."\n\n".$divider."\n[1/4] ERROR - it reports an exception\n")
         ->toContain('[2/4] FAILURE - it rejects the value with dataset "first"', '[3/4] FAILURE - it rejects the value with dataset "second"',
             '[4/4] FAILURE - it checks through a helper', "Fixture exception\n  The record is missing its identifier.", "\nStack trace\n",
             'expect($value)->toBe(0);', "expect('helper')->toBe('expected');", '--- Expected', '+++ Actual', 'tests-fixtures/helper.php:7')
         ->not->toContain("\033");
 })->with('progress runners');
+
+it('reruns just the files with failures using one selector', function (string $otherFile, string $otherTest, bool $ambiguous) {
+    $binary = progressProjectBinary($this->temp);
+    $tests = $this->temp.'/tests';
+    foreach (['Feature', 'Unit', 'Other'] as $directory) {
+        mkdir($tests.'/'.$directory, 0700, true);
+    }
+    foreach (['Feature/LoginTest.php', 'Unit/OrderTest.php'] as $file) {
+        copy(dirname(__DIR__).'/tests-fixtures/edge/Invoice-ImportTest.php', $tests.'/'.$file);
+    }
+    file_put_contents($tests.'/Other/'.$otherFile, '<?php '.$otherTest);
+    file_put_contents($this->temp.'/phpunit.xml', '<phpunit><testsuites><testsuite name="tests"><directory>tests</directory></testsuite></testsuites></phpunit>');
+    $env = ['PEST_FAILURES_FILE' => false, 'PEST_PROGRESS' => false, 'PARATEST' => false, 'TEST_TOKEN' => false, 'NO_COLOR' => '1'];
+    $initial = new Process([PHP_BINARY, $binary, '--progress'], $this->temp, $env);
+    $initial->run();
+    expect($initial->getOutput())->toContain('2 failed', '3 passed');
+
+    $report = file_get_contents($tests.'/pest-failures.txt');
+    preg_match('~^\./vendor/bin/pest [^\r\n]+~m', $report, $match);
+    $selector = $ambiguous ? 'tests/Feature/LoginTest.php tests/Unit/OrderTest.php' : '--filter="LoginTest|OrderTest"';
+    expect($match[0] ?? null)->toBe('./vendor/bin/pest '.$selector);
+    $rerun = Process::fromShellCommandline(escapeshellarg(PHP_BINARY).' '.$match[0], $this->temp, $env);
+    $rerun->run();
+    expect($rerun->getOutput())->toContain('2 failed', '2 passed');
+})->with([
+    'unique filenames' => ['OtherTest.php', "it('passes elsewhere', fn () => expect(true)->toBeTrue());", false],
+    'same filename elsewhere' => ['LoginTest.php', "it('passes elsewhere', fn () => expect(true)->toBeTrue());", true],
+    'name in another dataset' => ['OtherTest.php', "it('passes elsewhere', fn (\$n) => expect(\$n)->toBe(1))->with(['OrderTest example' => 1]);", true],
+]);
+
+it('reruns an explicitly selected file outside the configured suite by path', function (array $runner) {
+    $file = 'tests-fixtures/edge/Invoice-ImportTest.php';
+    $report = $this->temp.'/failures.txt';
+    progressFixture([$file, ...$runner, '--progress', '--failures-file='.$report]);
+    preg_match('/^\.\/vendor\/bin\/pest .*$/m', file_get_contents($report), $match);
+    expect($match[0] ?? null)->toBe('./vendor/bin/pest --test-directory=tests-fixtures --configuration=tests-fixtures/phpunit.xml '.$file);
+
+    progressProjectBinary($this->temp);
+    $fixtures = $this->temp.'/tests-fixtures';
+    mkdir($fixtures.'/edge', 0700, true);
+    mkdir($fixtures.'/passing');
+    copy(dirname(__DIR__).'/'.$file, $this->temp.'/'.$file);
+    copy(dirname(__DIR__).'/tests-fixtures/suite/PassTest.php', $fixtures.'/passing/Invoice-ImportTest.php');
+    file_put_contents($fixtures.'/phpunit.xml', '<phpunit><testsuites><testsuite name="invoices"><directory>.</directory></testsuite></testsuites></phpunit>');
+    $rerun = Process::fromShellCommandline(escapeshellarg(PHP_BINARY).' '.$match[0], $this->temp);
+    $rerun->run();
+    expect($rerun->getOutput())->toContain('1 failed', '1 passed')->not->toContain('passes each example');
+})->with(['sequential' => [[]], 'parallel' => [['--parallel', '--processes=2']]]);
 
 it('varies terminal detail while preserving the same full report at every level', function (array $runner) {
     $file = $this->temp.'/report.txt';
@@ -123,18 +188,11 @@ it('shows the native failure details on request without duplicating diagnostics'
 
 it('writes the default report in the project test directory only during enabled runs', function (string $testDirectory) {
     // Run the installed Pest entry point with an isolated project root and a nested working directory.
-    $installedVendor = dirname(__DIR__).'/vendor';
-    $projectVendor = $this->temp.'/vendor';
-    mkdir($projectVendor.'/bin', 0700, true);
-    mkdir($projectVendor.'/pestphp/pest/bin', 0700, true);
-    foreach (['bin/pest', 'pestphp/pest/bin/pest', 'pest-plugins.json'] as $path) {
-        copy($installedVendor.'/'.$path, $projectVendor.'/'.$path);
-    }
-    file_put_contents($projectVendor.'/autoload.php', '<?php return require '.var_export($installedVendor.'/autoload.php', true).';');
+    $binary = progressProjectBinary($this->temp);
     $cwd = $this->temp.'/'.$testDirectory.'/nested';
     mkdir($cwd, 0700, true);
     $file = $this->temp.'/'.$testDirectory.'/pest-failures.txt';
-    $run = fn (array $args): Process => progressFixture($args, ['PEST_FAILURES_FILE' => false], $cwd, $projectVendor.'/bin/pest', $testDirectory);
+    $run = fn (array $args): Process => progressFixture($args, ['PEST_FAILURES_FILE' => false], $cwd, $binary, $testDirectory);
 
     $native = $run([]);
     expect($native->getExitCode())->not->toBe(0)

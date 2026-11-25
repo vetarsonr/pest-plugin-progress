@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Vendor\PestProgress;
 
 use NunoMaduro\Collision\Adapters\Phpunit\Printers\DefaultPrinter;
+use PHPUnit\Event\Code\TestCollection;
 use PHPUnit\Event\TestRunner\ExecutionAbortedSubscriber;
 use PHPUnit\Event\TestSuite\TestSuite;
 use PHPUnit\TextUI\Configuration\Registry;
@@ -37,6 +38,8 @@ final class Run
     private readonly string $cwd;
 
     private ?RendererProcess $process = null;
+
+    private ?TestCollection $discoveredTests = null;
 
     /** @var resource|false */
     private $filter;
@@ -109,6 +112,14 @@ final class Run
         // Pest runs some combinations (e.g. --parallel --todo) in one process.
         $this->directory?->close();
         $this->directory = null;
+    }
+
+    public function suiteLoaded(TestSuite $suite): void
+    {
+        if ($this->options->file !== null && ! $this->options->restrictedSelection) {
+            $this->discoveredTests = $suite->tests();
+        }
+        $this->parallelSuite($suite);
     }
 
     public function parallelSuite(TestSuite $suite): void
@@ -203,7 +214,7 @@ final class Run
             }
         }
         if ($summarize) {
-            Summary::print($this->state, $this->options, $this->cwd, $this->signals->interrupted, $this->stoppedEarly());
+            Summary::print($this->state, $this->options, $this->cwd, $this->signals->interrupted, $this->stoppedEarly(), $this->discoveredTests);
         }
     }
 }

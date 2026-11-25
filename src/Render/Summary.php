@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Vendor\PestProgress\Render;
 
+use Pest\TestSuite;
+use PHPUnit\Event\Code\TestCollection;
 use Vendor\PestProgress\Collector\RunState;
 use Vendor\PestProgress\Failures\FailureList;
 use Vendor\PestProgress\Failures\FailuresFileWriter;
@@ -12,7 +14,7 @@ use Vendor\PestProgress\Options;
 
 final class Summary
 {
-    public static function print(RunState $state, Options $options, string $cwd, bool $interrupted, bool $stoppedEarly): void
+    public static function print(RunState $state, Options $options, string $cwd, bool $interrupted, bool $stoppedEarly, ?TestCollection $discoveredTests = null): void
     {
         $runNote = '';
         if ($interrupted) {
@@ -29,14 +31,15 @@ final class Summary
             fwrite(STDERR, $runNote."\n");
         }
 
-        $failures = new FailureList($state->failures, $cwd);
+        $suite = TestSuite::getInstance();
+        $failures = new FailureList($state->failures, $cwd, $suite->rootPath);
         $destination = '';
         if ($options->file !== null) {
             $path = $options->file;
             if (! str_starts_with($path, '/') && ! preg_match('~^(?:[a-z]:[/\\\\]|\\\\\\\\)~i', $path)) {
                 $path = $cwd.'/'.$path;
             }
-            if (FailuresFileWriter::write($path, TextReport::format($failures, $runNote))) {
+            if (FailuresFileWriter::write($path, TextReport::format($failures, $runNote, $suite->testPath, $options->configurationFile, $discoveredTests))) {
                 $destination = ' — written to '.$options->file;
             } else {
                 fwrite(STDERR, sprintf("[progress] Could not update %s\n", $options->file));
